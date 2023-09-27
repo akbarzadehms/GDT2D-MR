@@ -1,0 +1,512 @@
+---
+title: "Mendelian Randomization Report"
+subtitle: "Mendelian Randomization analysis [T2D and Graves' disease (GD)]"
+author: 
+- name: "Mahdi Akbarzadeh - Email: akbarzadeh.ms@gmail.com"
+- name: "Mahsa Heidari Foroozan"
+- name: "Samaneh Talebi"
+- name: "Sahand Tehrani Fateh"
+- name: "Danial Habibi"
+- name: "Farideh Neshati"
+- name: "Majid Valizadeh"
+- name: "Hamid Alavi Majd"
+- name: "Fereidoun Azizi"
+- name: "Mehdi Hedayati"
+- name: "Maryam Sadat Daneshpour"
+date: "`r Sys.Date()`"
+fontsize: 30pt  
+output: 
+  rmarkdown::html_document:
+    theme: journal
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Mendelian Randomization Report [T2D and Graves' disease (GD)] {.tabset}
+
+## [Graves' disease (GD) on T2D]
+
+### Introduction
+
+-   **Title:** Investigating the causality between **GD on T2D**
+
+    -   Exposure: Data downloaded from[NBC Human Database](https://humandbs.biosciencedbc.jp/en/hum0197-v3-220) \| Reference paper: [Saori Sakaue Paper 2021](https://pubmed.ncbi.nlm.nih.gov/34594039/) \| GWAS ID: [GCST90018847](https://www.ebi.ac.uk/gwas/studies/GCST90018847)
+    -   **Sample size**: 458,620 , **Number of cases**: 1,678 , **Number of controls**: 456,942
+    -   Outcome:T2D, Data downloaded from [DIAGRAM consortium](https://diagram-consortium.org/) \| Reference paper: [Mahajan Paper 2022](https://www.nature.com/articles/s41588-022-01058-3) \| GWAS ID:[GCST90132184](https://www.ebi.ac.uk/gwas/studies/GCST90132184)
+    -   **Sample size**:1,339,889 , **Number of cases**:180,834 , **Number of controls**: 1,159,055
+    -   Ancestry: **European**
+
+```{r setwd and packages, echo=FALSE, message=FALSE, warning=FALSE}
+#setwd("D:\\MR-Projects\\GD and T2D")
+setwd("C:\\Users\\cmos\\Desktop\\GD")
+rm(list=ls())
+library(TwoSampleMR)
+library(MRPracticals)
+library(phenoscanner)
+library(MRPRESSO)
+library(data.table)
+library(writexl)
+library(MendelianRandomization)
+```
+
+### Data Preparation
+
+1- **Number of total SNPs in exposure:** 18,904,735 SNPs 
+
+2- **Number of SNPs exposure with p-value \<** $5\times 10^-5$: 11,794 SNPs
+
+3- **Number of SNPs exposure after clumping** : 31 SNPs
+
+4- **Number of total SNPs in outcome**: 10,454,875 SNPs
+
+5- **Number of common variants between exposure and outcome**: 25 SNPs ("rs531136107" "rs11933469" "rs146114215" "rs1055821" "rs9274257" "rs1087056" have been eliminated)
+
+6- **Number of SNPs after replacing proxies**: 3 SNPs from [NIH LDproxy database](https://ldlink.nih.gov/?tab=ldproxy) according to EUR ancestry have been selected: 7 SNPs remained (We replace rs1087056&rs9274257&rs11933469 by rs793102&rs1049053&rs144334834 with R2 0.99&0.91&0.94, respectively).So, 28 SNPs remained.
+
+7- **Number of SNPs after harmonization (action=2)** = 27 SNPs (Removing the following SNPs for incompatible alleles:rs11933469)
+
+8- **Number of SNPs after removing HLA region with exploring in [HLA Genes, Nomenclature](https://hla.alleles.org/genes/index.html)** = 27 SNP
+
+9- **Number of SNPs after removing those that have MAF \< 0.01** = 27 SNPs
+
+10- Checking pleiotropy by [PhenoScanner](http://www.phenoscanner.medschl.cam.ac.uk/):
+
+How many SNPs have been eliminated after checking the PhenoScanner website: 25 SNPs (rs2476601,rs9275576 were removed)
+
+### Checking weakness of the instruments
+
+```{r Checking weekness, echo=TRUE, message=FALSE, warning=FALSE}
+data <- fread("dataAftScan_GD_T2D.txt")
+data$F<-(data$beta.exposure/data$se.exposure)^2
+summary(data$F)
+```
+
+How many SNPs have been eliminated with checking the weakness: 0 SNP
+
+### RUN an initial MR:
+
+```{r RUN an initial MR, echo=TRUE, message=FALSE, warning=FALSE}
+res<-mr(data)
+res
+plot(data$beta.exposure,data$beta.outcome)
+text(data$beta.exposure,                                
+     data$beta.outcome,
+     labels = data$SNP,
+     pos = 4)
+
+#scatter plot
+p1 <- mr_scatter_plot(res, data)	
+p1[[1]]
+
+#Heterogeneity testing
+mr_heterogeneity<- mr_heterogeneity(data); mr_heterogeneity
+
+#pleiotropy testing
+mr_pleiotropy_test<- mr_pleiotropy_test(data); mr_pleiotropy_test
+
+#plot of single SNP MR:
+res_single <- mr_singlesnp(data); p2 <- mr_forest_plot(res_single); p2[[1]]
+
+#plot of LOO:
+res_loo <- mr_leaveoneout(data); p3 <- mr_leaveoneout_plot(res_loo); p3[[1]]
+
+#Funnel plot
+p4 <- mr_funnel_plot(res_single); p4[[1]]
+```
+
+### Testing Outlier with PRESSO test
+
+```{r PRESSO, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Radial test
+  
+data <- fread("dataAftScan_GD_T2D.txt")
+data <- as.data.frame(data)
+
+mr_presso(BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure", SdOutcome = "se.outcome", SdExposure = "se.exposure",
+          OUTLIERtest = TRUE, DISTORTIONtest = TRUE, data = data, NbDistribution = 1000,  SignifThreshold = 0.05)
+
+###  data <- data[(data$SNP!="rs4338740" & data$SNP!="rs17651741" &
+###                  data$SNP!="rs9274257" & data$SNP!="rs73409559" &
+###                  data$SNP!="rs12371558" & data$SNP!="rs114824864" &
+###                  data$SNP!="rs12294180" & data$SNP!="rs10732976"& data$SNP!="rs79636620"),]
+
+res<-mr(data)
+
+res
+plot(data$beta.exposure,data$beta.outcome)
+text(data$beta.exposure,
+     data$beta.outcome,
+     labels = data$SNP,
+     pos = 4)
+
+#scatter plot
+p1 <- mr_scatter_plot(res, data)
+p1[[1]]
+
+#Heterogeneity testing
+mr_heterogeneity<- mr_heterogeneity(data); mr_heterogeneity
+
+#pleiotropy testing
+mr_pleiotropy_test<- mr_pleiotropy_test(data); mr_pleiotropy_test
+
+#plot of single SNP MR:
+res_single <- mr_singlesnp(data); p2 <- mr_forest_plot(res_single); p2[[1]]
+
+#plot of LOO:
+res_loo <- mr_leaveoneout(data); p3 <- mr_leaveoneout_plot(res_loo); p3[[1]]
+
+#Funnel plot
+p4 <- mr_funnel_plot(res_single); p4[[1]]
+```
+
+### Studentized residuals:
+
+```{r Studentized residuals, echo=TRUE, message=FALSE, warning=FALSE}
+reg_1<-lm(data$beta.outcome~data$beta.exposure-1)
+data$st_1<-rstandard(reg_1)
+
+#Histogram plot
+hist(data$st_1)
+```
+
+### Radial test
+
+```{r Radial, echo=FALSE, message=FALSE, warning=FALSE}
+#Radial test: 
+
+radial_data<-format_radial(data$beta.exposure, data$beta.outcome,
+                           data$se.exposure, data$se.outcome,
+                           data$SNP)
+ivw_model<-ivw_radial(radial_data, 0.05/nrow(radial_data),3,0.0001)
+ivw_model$outliers
+```
+
+### Cook's distance
+
+In statistics, Cook's distance or Cook's D is a commonly used estimate of the influence of a data point when performing a least-squares regression analysis.[1] In a practical ordinary least squares analysis, Cook's distance can be used in several ways:
+
+1- To indicate influential data points that are particularly worth checking for validity.
+
+2- To indicate regions of the design space where it would be good to be able to obtain more data points.
+
+**It is named after the American statistician R. Dennis Cook, who introduced the concept in 1977.**
+
+[Refernce](https://en.wikipedia.org/wiki/Cook%27s_distance)
+
+```{r Cook distance,, echo=TRUE, message=FALSE, warning=FALSE}
+par(mfrow = c(2, 2))
+model <- lm(data$beta.outcome~data$beta.exposure-1)
+plot(model)
+par(mfrow = c(1, 1))
+
+cooksD <- cooks.distance(model)
+influential <- cooksD[(cooksD > (3 * mean(cooksD, na.rm = TRUE)))]
+influential
+```
+
+### Run After deleting new outlier: Final Results:
+
+```{r Final Results,, echo=TRUE, message=FALSE, warning=FALSE}
+
+data <- data[(data$SNP!="rs17651741" & data$SNP!="rs4338740" &  data$SNP!="rs9274257" 
+              & data$SNP!="rs79636620" &data$SNP!="rs73409559" 
+              & data$SNP!="rs12371558" & data$SNP!="rs114824864" 
+              & data$SNP!="rs12294180" & data$SNP!="rs10732976"),]
+
+res<-mr(data)
+
+res
+plot(data$beta.exposure,data$beta.outcome)
+text(data$beta.exposure,                                
+     data$beta.outcome,
+     labels = data$SNP,
+     pos = 4)
+
+
+#Heterogeneity testing
+mr_heterogeneity<- mr_heterogeneity(data); mr_heterogeneity
+
+#pleiotropy testing
+mr_pleiotropy_test<- mr_pleiotropy_test(data); mr_pleiotropy_test
+
+#scatter plot
+p1 <- mr_scatter_plot(res, data); p1[[1]]
+
+#plot of single SNP MR:
+res_single <- mr_singlesnp(data); p2 <- mr_forest_plot(res_single); p2[[1]]
+
+#plot of LOO:
+res_loo <- mr_leaveoneout(data); p3 <- mr_leaveoneout_plot(res_loo); p3[[1]]
+
+#Funnel plot
+p4 <- mr_funnel_plot(res_single); p4[[1]]
+```
+
+### Sensitivity analyses with MendelianRandomization Package
+
+```{r MendelianRandomization, echo=FALSE, message=FALSE, warning=FALSE}
+
+MRInputObject <- mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome)
+IVWObject <- mr_ivw(MRInputObject,
+                    model = "default",
+                    robust = FALSE,
+                    penalized = FALSE,
+                    correl = FALSE,
+                    weights = "simple",
+                    psi = 0,
+                    distribution = "normal",
+                    alpha = 0.05)
+IVWObject
+
+MRAllObject_all <- mr_allmethods(MRInputObject, method = "all")
+MRAllObject_all
+mr_plot(MRAllObject_all)
+
+mr_forest(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome),
+          snp_estimates=FALSE,
+          methods = c("ivw", "median", "wmedian", "egger", "maxlik", "mbe"))
+###########
+data$samplesize.exposure <- "1339889"
+data$samplesize.outcome <- "458620"
+data$samplesize.exposure <- as.numeric(data$samplesize.exposure)
+data$samplesize.outcome <- as.numeric(data$samplesize.outcome)
+
+out <- directionality_test(data)
+knitr::kable(out)
+
+mr_steiger(
+  p_exp = data$pval.exposure, 
+  p_out = data$pval.outcome, 
+  n_exp = data$samplesize.exposure, 
+  n_out = data$samplesize.outcome, 
+  r_xxo = 1, 
+  r_yyo = 1,
+  r_exp=0,
+  r_out = 0.5
+)
+```
+
+### Working with MRraps
+
+```{r MRraps, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(mr.raps)
+mr.raps.simple(data$beta.exposure,data$beta.outcome, data$se.exposure, data$se.outcome, diagnosis = FALSE)
+mr.raps.all(data$beta.exposure,data$beta.outcome, data$se.exposure, data$se.outcome)
+mr_lasso(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome))
+mr_cML(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome), MA = TRUE, DP = FALSE,, n = 458620)
+mr_divw(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome))
+mr_mbe(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome), weighting="weighted", stderror="delta",iterations=100)
+mr_funnel(MRInputObject, CI = TRUE)
+mr_plot(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome),
+        error = TRUE, orientate = FALSE, line = "ivw", interactive = FALSE)
+```
+
+## [T2D on Graves' disease (GD)]
+
+### Introduction
+
+-   **Title:** Investigating the causality between **T2D on GD**
+
+    -   Exposure:T2D, [DIAGRAM consortium](https://diagram-consortium.org/) \| Reference paper: [Mahajan Paper 2022](https://www.nature.com/articles/s41588-022-01058-3) \| GWAS ID:[GCST90132184](https://www.ebi.ac.uk/gwas/studies/GCST90132184)
+    -   **Sample size**:1,339,889 , **Number of cases**:180,834 , **Number of controls**: 1,159,055
+    -   Outcome: [NBC Human Database](https://humandbs.biosciencedbc.jp/en/hum0197-v3-220) \| Reference paper: [Saori Sakaue Paper 2021](https://pubmed.ncbi.nlm.nih.gov/34594039/) \| GWAS ID: [GCST90018847](https://www.ebi.ac.uk/gwas/studies/GCST90018847)
+    -   **Sample size**: 458,620 , **Number of cases**: 1,678 , **Number of controls**: 456,942
+    -   Ancestry: **European**
+
+```{r setwd and packages1, echo=FALSE, message=FALSE, warning=FALSE}
+#setwd("D:\\MR-Projects\\GD and T2D")
+setwd("C:\\Users\\cmos\\Desktop\\GD")
+rm(list=ls())
+library(TwoSampleMR)
+library(MRPracticals)
+library(phenoscanner)
+library(MRPRESSO)
+library(data.table)
+library(writexl)
+library(MendelianRandomization)
+```
+
+### Data Preparation
+
+1- **Number of total SNPs in exposure:** 10,454,875 SNPs
+
+2- **Number of SNPs exposure with p-value \<** $5\times 10^-8$ = 17,450 SNPs
+
+3- **Number of SNPs exposure after clumping** = 187 SNPs
+
+4- **Number of total SNPs in outcome**: 18,904,735 SNPs
+
+5- **Number of common variants between exposure and outcome**: 170 SNPs
+
+6- **Number of SNPs after harmonization (action=2)** = 165 SNPs
+
+8- **Number of SNPs after removing HLA region with exploring in [HLA Genes, Nomenclature](https://hla.alleles.org/genes/index.html)** = 165 SNP
+
+9- **Number of SNPs after removing those that have MAF \< 0.01** = 165 SNPs
+
+### Checking pleiotropy by [Phenoscanner](http://www.phenoscanner.medschl.cam.ac.uk/):
+
+How many SNPs have been eliminated with checking the phenoscanner website: 165 SNPs (rs3094682,rs601945)
+
+### Checking weakness of the instruments
+
+```{r Checking weekness1, echo=TRUE, message=FALSE, warning=FALSE}
+data <- fread("dataAftScan_T2D_GD.txt")
+data$F<-(data$beta.exposure/data$se.exposure)^2
+summary(data$F)
+```
+
+How many SNPs have been eliminated with checking the weakness: 0 SNP
+
+### RUN an initial MR:
+
+```{r RUN an initial MR1, echo=TRUE, message=FALSE, warning=FALSE}
+res<-mr(data)
+res
+plot(data$beta.exposure,data$beta.outcome)
+text(data$beta.exposure,                                
+     data$beta.outcome,
+     labels = data$SNP,
+     pos = 4)
+
+#scatter plot
+p1 <- mr_scatter_plot(res, data)	
+p1[[1]]
+
+#Heterogeneity testing
+mr_heterogeneity<- mr_heterogeneity(data); mr_heterogeneity
+
+#pleiotropy testing
+mr_pleiotropy_test<- mr_pleiotropy_test(data); mr_pleiotropy_test
+
+#plot of single SNP MR:
+res_single <- mr_singlesnp(data); p2 <- mr_forest_plot(res_single); p2[[1]]
+
+#plot of LOO:
+res_loo <- mr_leaveoneout(data); p3 <- mr_leaveoneout_plot(res_loo); p3[[1]]
+
+#Funnel plot
+p4 <- mr_funnel_plot(res_single); p4[[1]]
+```
+
+### Testing Outlier with PRESSO test
+
+```{r PRESSO1, echo=FALSE, message=FALSE, warning=FALSE}
+#Radial test: 
+data <- fread("dataAftScan_T2D_GD.txt")
+data <- as.data.frame(data)
+
+mr_presso(BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure", SdOutcome = "se.outcome", SdExposure = "se.exposure",
+          OUTLIERtest = TRUE, DISTORTIONtest = TRUE, data = data, NbDistribution = 1000,  SignifThreshold = 0.05)
+
+#data <- data[(data$SNP!="rs9368222" & data$SNP!="rs1708302"),]
+data <-data[(data$SNP!="rs10097617" & data$SNP!="rs116425039" &  data$SNP!="rs141521721" & data$SNP!="rs145678014" 
+               & data$SNP!="rs17030845" & data$SNP!="rs1708302" & data$SNP!="rs17791513" & data$SNP!="rs35011184"              
+              & data$SNP!="rs62107261" & data$SNP!="rs7325671"& data$SNP!="rs9368222"& data$SNP!="rs9379084"&data$SNP!="rs7633675"
+              &data$SNP!="rs72802358" &data$SNP!="rs55872725"&data$SNP!="rs3802177"
+             & data$SNP!="rs1800961" & data$SNP!="rs139688524" & data$SNP!="rs10882099" & data$SNP!="rs10811660"),]
+
+
+res<-mr(data)
+res
+plot(data$beta.exposure,data$beta.outcome)
+text(data$beta.exposure,                                
+     data$beta.outcome,
+     labels = data$SNP,
+     pos = 4)
+
+#scatter plot
+p1 <- mr_scatter_plot(res, data)	
+p1[[1]]
+
+#Heterogeneity testing
+mr_heterogeneity<- mr_heterogeneity(data); mr_heterogeneity
+
+#pleiotropy testing
+mr_pleiotropy_test<- mr_pleiotropy_test(data); mr_pleiotropy_test
+
+#plot of single SNP MR:
+res_single <- mr_singlesnp(data); p2 <- mr_forest_plot(res_single); p2[[1]]
+
+#plot of LOO:
+res_loo <- mr_leaveoneout(data); p3 <- mr_leaveoneout_plot(res_loo); p3[[1]]
+
+#Funnel plot
+p4 <- mr_funnel_plot(res_single); p4[[1]]
+```
+
+### Radial test
+
+```{r Radial1, echo=FALSE, message=FALSE, warning=FALSE}
+#Radial test: 
+
+radial_data<-format_radial(data$beta.exposure, data$beta.outcome,
+                           data$se.exposure, data$se.outcome,
+                           data$SNP)
+ivw_model<-ivw_radial(radial_data, 0.05/nrow(radial_data),3,0.0001)
+ivw_model$outliers
+```
+
+### MendelianRandomization Package
+
+```{r MendelianRandomization1, echo=FALSE, message=FALSE, warning=FALSE}
+
+MRInputObject <- mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome)
+IVWObject <- mr_ivw(MRInputObject,
+                    model = "default",
+                    robust = FALSE,
+                    penalized = FALSE,
+                    correl = FALSE,
+                    weights = "simple",
+                    psi = 0,
+                    distribution = "normal",
+                    alpha = 0.05)
+IVWObject
+
+MRAllObject_all <- mr_allmethods(MRInputObject, method = "all")
+MRAllObject_all
+mr_plot(MRAllObject_all)
+
+mr_forest(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome),
+          snp_estimates=FALSE,
+          methods = c("ivw", "median", "wmedian", "egger", "maxlik", "mbe"))
+###########
+data$samplesize.exposure <- "1339889"
+data$samplesize.outcome <- "458620"
+data$samplesize.exposure <- as.numeric(data$samplesize.exposure)
+data$samplesize.outcome <- as.numeric(data$samplesize.outcome)
+
+out <- directionality_test(data)
+knitr::kable(out)
+
+mr_steiger(
+  p_exp = data$pval.exposure, 
+  p_out = data$pval.outcome, 
+  n_exp = data$samplesize.exposure, 
+  n_out = data$samplesize.outcome, 
+  r_xxo = 1, 
+  r_yyo = 1,
+  r_exp=0,
+  r_out = 0.5
+)
+```
+
+### Working with MRraps
+
+```{r MRraps1, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(mr.raps)
+mr.raps.simple(data$beta.exposure,data$beta.outcome, data$se.exposure, data$se.outcome, diagnosis = FALSE)
+mr.raps.all(data$beta.exposure,data$beta.outcome, data$se.exposure, data$se.outcome)
+mr_lasso(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome))
+mr_cML(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome), MA = TRUE, DP = FALSE,, n = 458620)
+mr_divw(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome))
+mr_mbe(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome), weighting="weighted", stderror="delta",iterations=100)
+mr_funnel(MRInputObject, CI = TRUE)
+mr_plot(mr_input(bx = data$beta.exposure,bxse = data$se.exposure,by = data$beta.outcome,byse = data$se.outcome),
+        error = TRUE, orientate = FALSE, line = "ivw", interactive = FALSE)
+```
